@@ -40,8 +40,8 @@ export {
   type MiddlewareClientNextFn,
   type ClientAfterResultWithContext,
   type ClientResultWithContext,
-  type AssignAllClientAfterContext,
-  type AssignAllClientContext,
+  type AssignAllClientContextAfterServer,
+  type AssignAllClientContextBeforeNext,
   type AssignAllMiddleware,
   type AssignAllServerContext,
   type MiddlewareAfterValidator,
@@ -69,7 +69,6 @@ export { StartClient } from './StartClient'
 export { mergeHeaders } from './headers'
 export { renderRsc } from './renderRSC'
 export { useServerFn } from './useServerFn'
-export { serverFnFetcher } from './serverFnFetcher'
 export {
   type DehydratedRouter,
   type ClientExtractedBaseEntry,
