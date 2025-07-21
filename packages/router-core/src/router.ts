@@ -14,6 +14,10 @@ import {
   replaceEqualDeep,
 } from './utils'
 import {
+  SEGMENT_TYPE_OPTIONAL_PARAM,
+  SEGMENT_TYPE_PARAM,
+  SEGMENT_TYPE_PATHNAME,
+  SEGMENT_TYPE_WILDCARD,
   cleanPath,
   interpolatePath,
   joinPaths,
@@ -81,12 +85,6 @@ import type { Manifest } from './manifest'
 import type { AnySchema, AnyValidator } from './validators'
 import type { NavigateOptions, ResolveRelativePath, ToOptions } from './link'
 import type { NotFoundError } from './not-found'
-
-declare global {
-  interface Window {
-    __TSR_ROUTER__?: AnyRouter
-  }
-}
 
 export type ControllablePromise<T = any> = Promise<T> & {
   resolve: (value: T) => void
@@ -3278,12 +3276,12 @@ export function processRouteTree<TRouteLike extends RouteLike>({
       }
 
       let baseScore: number | undefined = undefined
-      if (segment.type === 'param') {
+      if (segment.type === SEGMENT_TYPE_PARAM) {
         baseScore = REQUIRED_PARAM_BASE_SCORE
-      } else if (segment.type === 'optional-param') {
+      } else if (segment.type === SEGMENT_TYPE_OPTIONAL_PARAM) {
         baseScore = OPTIONAL_PARAM_BASE_SCORE
         optionalParamCount++
-      } else if (segment.type === 'wildcard') {
+      } else if (segment.type === SEGMENT_TYPE_WILDCARD) {
         baseScore = WILDCARD_PARAM_BASE_SCORE
       }
 
@@ -3293,7 +3291,10 @@ export function processRouteTree<TRouteLike extends RouteLike>({
         // JUST FOR SORTING, NOT FOR MATCHING
         for (let i = index + 1; i < parsed.length; i++) {
           const nextSegment = parsed[i]!
-          if (nextSegment.type === 'pathname' && nextSegment.value !== '/') {
+          if (
+            nextSegment.type === SEGMENT_TYPE_PATHNAME &&
+            nextSegment.value !== '/'
+          ) {
             hasStaticAfter = true
             return handleParam(segment, baseScore + 0.2)
           }
@@ -3386,7 +3387,8 @@ export function getMatchedRoutes<TRouteLike extends RouteLike>({
     const result = matchPathname(basepath, trimmedPath, {
       to: route.fullPath,
       caseSensitive: route.options?.caseSensitive ?? caseSensitive,
-      fuzzy: false,
+      // we need fuzzy matching for `notFoundMode: 'fuzzy'`
+      fuzzy: true,
     })
     return result
   }
@@ -3396,16 +3398,34 @@ export function getMatchedRoutes<TRouteLike extends RouteLike>({
   if (foundRoute) {
     routeParams = getMatchedParams(foundRoute)!
   } else {
-    foundRoute = flatRoutes.find((route) => {
+    // iterate over flatRoutes to find the best match
+    // if we find a fuzzy matching route, keep looking for a perfect fit
+    let fuzzyMatch:
+      | { foundRoute: TRouteLike; routeParams: Record<string, string> }
+      | undefined = undefined
+    for (const route of flatRoutes) {
       const matchedParams = getMatchedParams(route)
 
       if (matchedParams) {
-        routeParams = matchedParams
-        return true
+        if (
+          route.path !== '/' &&
+          (matchedParams as Record<string, string>)['**']
+        ) {
+          if (!fuzzyMatch) {
+            fuzzyMatch = { foundRoute: route, routeParams: matchedParams }
+          }
+        } else {
+          foundRoute = route
+          routeParams = matchedParams
+          break
+        }
       }
-
-      return false
-    })
+    }
+    // did not find a perfect fit, so take the fuzzy matching route if it exists
+    if (!foundRoute && fuzzyMatch) {
+      foundRoute = fuzzyMatch.foundRoute
+      routeParams = fuzzyMatch.routeParams
+    }
   }
 
   let routeCursor: TRouteLike = foundRoute || routesById[rootRouteId]!
